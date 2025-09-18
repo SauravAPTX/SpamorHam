@@ -20,12 +20,27 @@ def download_nltk_resources():
     try:
         nltk.data.find("tokenizers/punkt")
     except LookupError:
-        nltk.download("punkt", quiet=True)
+        try:
+            nltk.download("punkt", quiet=True)
+        except:
+            pass
+    
+    # Try downloading the newer punkt_tab tokenizer
+    try:
+        nltk.data.find("tokenizers/punkt_tab")
+    except LookupError:
+        try:
+            nltk.download("punkt_tab", quiet=True)
+        except:
+            pass
 
     try:
         nltk.data.find("corpora/stopwords")
     except LookupError:
-        nltk.download("stopwords", quiet=True)
+        try:
+            nltk.download("stopwords", quiet=True)
+        except:
+            pass
     
     return PorterStemmer()
 
@@ -41,23 +56,38 @@ def transform_text(text):
     4. Removes stopwords and punctuation
     5. Applies stemming
     """
-    if not text.strip():
+    if not text or not text.strip():
         return ""
     
-    text = text.lower()
-    text = nltk.word_tokenize(text)
-
-    # Remove non-alphanumeric characters
-    text = [word for word in text if word.isalnum()]
+    try:
+        text = text.lower()
+        # Use simple split as fallback if nltk tokenization fails
+        try:
+            text = nltk.word_tokenize(text)
+        except:
+            # Fallback to simple whitespace tokenization
+            text = text.split()
+        
+        # Remove non-alphanumeric characters
+        text = [word for word in text if word.isalnum()]
+        
+        # Remove stopwords and punctuation
+        try:
+            stop_words = set(stopwords.words('english'))
+        except:
+            # Fallback stop words list if NLTK fails
+            stop_words = {'i', 'me', 'my', 'myself', 'we', 'our', 'ours', 'ourselves', 'you', "you're", "you've", "you'll", "you'd", 'your', 'yours', 'yourself', 'yourselves', 'he', 'him', 'his', 'himself', 'she', "she's", 'her', 'hers', 'herself', 'it', "it's", 'its', 'itself', 'they', 'them', 'their', 'theirs', 'themselves', 'what', 'which', 'who', 'whom', 'this', 'that', "that'll", 'these', 'those', 'am', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had', 'having', 'do', 'does', 'did', 'doing', 'a', 'an', 'the', 'and', 'but', 'if', 'or', 'because', 'as', 'until', 'while', 'of', 'at', 'by', 'for', 'with', 'through', 'during', 'before', 'after', 'above', 'below', 'up', 'down', 'in', 'out', 'on', 'off', 'over', 'under', 'again', 'further', 'then', 'once'}
+        
+        text = [word for word in text if word not in stop_words and word not in string.punctuation]
+        
+        # Apply stemming
+        text = [ps.stem(word) for word in text]
+        
+        return " ".join(text)
     
-    # Remove stopwords and punctuation
-    stop_words = set(stopwords.words('english'))
-    text = [word for word in text if word not in stop_words and word not in string.punctuation]
-    
-    # Apply stemming
-    text = [ps.stem(word) for word in text]
-    
-    return " ".join(text)
+    except Exception as e:
+        st.error(f"Error in text preprocessing: {str(e)}")
+        return ""
 
 # Load models with caching
 @st.cache_resource
@@ -111,25 +141,27 @@ with st.expander("ℹ️ How it works"):
     - Stemming words to their root form
     """)
 
-# Input section
-st.subheader("📝 Enter Your Message")
-input_sms = st.text_area(
-    "Message to classify:",
-    height=100,
-    placeholder="Type or paste your email/SMS message here..."
-)
-
 # Add example messages
 col1, col2 = st.columns(2)
 with col1:
     if st.button("📩 Try Spam Example"):
-        input_sms = "URGENT! You've won $1000! Click here now to claim your prize. Limited time offer!"
-        st.rerun()
+        st.session_state.input_sms = "URGENT! You've won $1000! Click here now to claim your prize. Limited time offer!"
 
 with col2:
     if st.button("📧 Try Normal Example"):
-        input_sms = "Hi, how are you doing? Let's catch up over coffee this weekend."
-        st.rerun()
+        st.session_state.input_sms = "Hi, how are you doing? Let's catch up over coffee this weekend."
+
+# Use session state for input
+if 'input_sms' not in st.session_state:
+    st.session_state.input_sms = ""
+
+input_sms = st.text_area(
+    "Message to classify:",
+    value=st.session_state.input_sms,
+    height=100,
+    placeholder="Type or paste your email/SMS message here...",
+    key="message_input"
+)
 
 # Prediction section
 if st.button('🔍 Predict', type="primary", use_container_width=True):
